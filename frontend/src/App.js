@@ -1,5 +1,5 @@
 import React, { useState, useEffect, createContext, useContext } from 'react';
-import { initializeApp } from 'firebase/app';
+import { initializeApp, getApps, getApp } from 'firebase/app'; // Added getApps, getApp
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, doc, setDoc, updateDoc, onSnapshot, collection, getDocs, writeBatch } from 'firebase/firestore';
 
@@ -21,8 +21,35 @@ const FirebaseProvider = ({ children }) => {
 
     useEffect(() => {
         try {
-            const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-            const initializedApp = initializeApp(firebaseConfig);
+            // --- CHANGED THIS SECTION FOR RENDER DEPLOYMENT ---
+            const firebaseConfig = {
+                apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
+                authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
+                projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
+                storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
+                messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
+                appId: process.env.REACT_APP_FIREBASE_APP_ID,
+                measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID // Optional
+            };
+
+            // Ensure projectId is provided
+            if (!firebaseConfig.projectId) {
+                console.error("Firebase Initialization Error: projectId not provided in environment variables.");
+                showMessageBox("Firebase setup incomplete. Contact support.", "error"); // Use showMessageBox
+                setIsAuthReady(true); // Mark auth ready to unblock UI, but with error
+                return;
+            }
+
+            let initializedApp;
+            // Check if a Firebase app with the default name already exists
+            if (!getApps().length) { // Only initialize if no apps are already initialized
+                initializedApp = initializeApp(firebaseConfig);
+            } else {
+                initializedApp = getApp(); // Get the already initialized app
+                console.warn("Firebase app already initialized. Using existing app.");
+            }
+            // --- END CHANGED SECTION ---
+
             const firestoreDb = getFirestore(initializedApp);
             const firebaseAuth = getAuth(initializedApp);
 
@@ -35,16 +62,13 @@ const FirebaseProvider = ({ children }) => {
                 if (user) {
                     setUserId(user.uid);
                 } else {
-                    // Sign in anonymously if no user is authenticated
+                    // For Render deployment, __initial_auth_token is not available.
+                    // We will rely on anonymous sign-in or a proper login flow.
                     try {
-                        const token = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-                        if (token) {
-                            await signInWithCustomToken(firebaseAuth, token);
-                        } else {
-                            await signInAnonymously(firebaseAuth);
-                        }
+                        await signInAnonymously(firebaseAuth);
                     } catch (error) {
-                        console.error("Firebase authentication failed:", error);
+                        console.error("Firebase anonymous authentication failed:", error);
+                        showMessageBox("Anonymous login failed. Some features may not work.", "error");
                     }
                 }
                 setIsAuthReady(true); // Auth state is ready after initial check/sign-in
@@ -52,7 +76,9 @@ const FirebaseProvider = ({ children }) => {
 
             return () => unsubscribe(); // Clean up the listener
         } catch (error) {
-            console.error("Failed to initialize Firebase:", error);
+            console.error("Failed to initialize Firebase in catch block:", error);
+            showMessageBox("Failed to initialize Firebase. Check console for details.", "error");
+            setIsAuthReady(true); // Ensure authReady is set even on error
         }
     }, []);
 
