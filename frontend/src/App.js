@@ -1,15 +1,15 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react'; // Added useCallback
 import { BrowserRouter as Router, Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom';
 import apiClient from './api/apiClient';
-import { useFirebase } from './contexts/FireBaseContext'; // Assuming this is now a separate file
+import { useFirebase } from './contexts/FirebaseContext';
 import { XCircle, User as UserIcon } from 'lucide-react';
 
-// Import our page components (assuming they are in their own files)
+// Import our page components (these MUST exist as separate files in frontend/src/pages/)
 import JobListPage from './pages/JobListPage';
 import UserDashboardPage from './pages/UserDashboardPage';
 import JobDetailPage from './pages/JobDetailPage';
 
-// --- Global Message Box Component (kept here for simplicity as it's a global UI element) ---
+// --- Global Message Box Component ---
 const MessageBox = ({ message, type, onClose }) => {
   if (!message) return null;
   const bgColor = type === 'error' ? 'bg-red-100 border-red-400 text-red-700' : 'bg-green-100 border-green-400 text-green-700';
@@ -27,35 +27,32 @@ const MessageBox = ({ message, type, onClose }) => {
 
 // --- Main App Component ---
 function App() {
-  const { userId, isAuthReady, db } = useFirebase(); // Added db from useFirebase
+  const { userId, isAuthReady } = useFirebase();
   const [message, setMessage] = useState(null);
   const [messageType, setMessageType] = useState('success');
-  const [savedJobIds, setSavedJobIds] = useState([]);
-  const [savedJobsFull, setSavedJobsFull] = useState([]);
-  const [userCV, setUserCV] = useState('');
-  const [aiRecommendations, setAiRecommendations] = useState([]);
-  const [skillGaps, setSkillGaps] = useState([]);
-  const [isGeneratingAI, setIsGeneratingAI] = useState(false);
+  const [savedJobIds, setSavedJobIds] = useState([]); // Stores only IDs for quick lookup
+  const [savedJobsFull, setSavedJobsFull] = useState([]); // Stores full job objects for dashboard display
+  const [userCV, setUserCV] = useState(''); // New state for user CV
+  const [aiRecommendations, setAiRecommendations] = useState([]); // State for AI recommendations
+  const [skillGaps, setSkillGaps] = useState([]); // State for skill gaps
+  const [isGeneratingAI, setIsGeneratingAI] = useState(false); // Loading state for AI generation
   const location = useLocation();
   const navigate = useNavigate();
 
   const initialSyncNotified = useRef(false);
-  const isFetchingUserData = useRef(false);
+  const isFetchingUserData = useRef(false); // New ref to prevent multiple fetches
 
-  // Firestore app ID for user data
-  const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-
-  const showMessageBox = useCallback((msg, type = 'success') => {
+  const showMessageBox = useCallback((msg, type = 'success') => { // Memoize showMessageBox
     setMessage(msg);
     setMessageType(type);
     setTimeout(() => setMessage(null), 5000);
-  }, []);
+  }, []); // Empty dependency array means this function is stable
 
-  const handleSelectJob = useCallback((jobId) => {
+  const handleSelectJob = useCallback((jobId) => { // Memoize handleSelectJob
     navigate(`/jobs/${jobId}`);
   }, [navigate]);
 
-  const handleSaveToggle = useCallback(async (jobId) => {
+  const handleSaveToggle = useCallback(async (jobId) => { // Memoize handleSaveToggle
     if (!userId) {
       showMessageBox("Please log in to save jobs.", "error");
       return;
@@ -63,7 +60,6 @@ function App() {
 
     const isCurrentlySaved = savedJobIds.includes(jobId);
     try {
-      // Use backend API for saving/unsaving jobs
       if (isCurrentlySaved) {
         await apiClient.delete(`/users/${userId}/saved-jobs/${jobId}`);
         setSavedJobIds(prev => prev.filter(id => id !== jobId));
@@ -82,8 +78,9 @@ function App() {
       console.error("Error toggling saved job status:", error);
       showMessageBox("Failed to update saved job status. Please try again.", "error");
     }
-  }, [userId, savedJobIds, showMessageBox, isAuthReady]);
+  }, [userId, savedJobIds, showMessageBox, isAuthReady]); // Dependencies for handleSaveToggle
 
+  // Handler for saving CV
   const handleSaveCV = useCallback(async (cvContent) => {
     if (!userId) {
       showMessageBox("Please log in to save your CV.", "error");
@@ -91,7 +88,7 @@ function App() {
     }
     try {
       await apiClient.post(`/users/${userId}/cv`, { cvContent });
-      setUserCV(cvContent);
+      setUserCV(cvContent); // Update displayed CV
       showMessageBox("CV saved successfully!", "success");
     } catch (error) {
       console.error("Error saving CV:", error);
@@ -99,6 +96,7 @@ function App() {
     }
   }, [userId, showMessageBox]);
 
+  // Handler for generating AI recommendations
   const handleGenerateAI = useCallback(async () => {
     if (!userId || !userCV) {
       showMessageBox("Please log in and upload your CV to generate recommendations.", "error");
@@ -108,7 +106,7 @@ function App() {
     showMessageBox("Generating AI recommendations...", "info");
 
     try {
-      // Fetch all jobs from backend API
+      // Fetch all jobs to send to AI for context
       const allJobsResponse = await apiClient.get('/jobs');
       const allJobs = allJobsResponse.data;
 
@@ -148,7 +146,7 @@ function App() {
       };
 
       // Use environment variable for API key in production builds
-      const apiKey = process.env.REACT_APP_GEMINI_API_KEY;
+      const apiKey = process.env.REACT_APP_GEMINI_API_KEY; // <--- This will now correctly read from Render ENV
 
       const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
 
@@ -168,16 +166,7 @@ function App() {
 
           setAiRecommendations(parsedJson.recommendations || []);
           setSkillGaps(parsedJson.skillGaps || []);
-
-          // Save AI recommendations to Firestore
-          if (db && userId) {
-            const userDocRef = doc(db, `artifacts/${appId}/users/${userId}/userData/profile`);
-            await updateDoc(userDocRef, {
-                aiRecommendations: parsedJson.recommendations || [],
-                skillGaps: parsedJson.skillGaps || []
-            });
-          }
-          showMessageBox("AI recommendations generated and saved!", "success");
+          showMessageBox("AI recommendations generated!", "success");
       } else {
           console.error("Unexpected API response structure:", result);
           showMessageBox("Failed to generate AI recommendations. Unexpected response.", "error");
@@ -188,55 +177,49 @@ function App() {
     } finally {
       setIsGeneratingAI(false);
     }
-  }, [userId, userCV, showMessageBox, db, appId]); // Added db and appId as dependencies
+  }, [userId, userCV, showMessageBox]);
 
-  // Effect to sync user with backend (PostgreSQL) and fetch user-specific data from Firestore
+
+  // Effect to sync user with backend (PostgreSQL) and fetch user-specific data
   useEffect(() => {
-    if (!isAuthReady || !userId || !db || isFetchingUserData.current) { // Added !db
-      return;
-    }
+    const syncUserAndFetchUserData = async () => {
+      if (!isAuthReady || !userId || isFetchingUserData.current) {
+        return;
+      }
 
-    isFetchingUserData.current = true;
-    console.log("Firebase Auth Ready. Syncing user data. User ID:", userId);
-    try {
-        const userDocRef = doc(db, `artifacts/${appId}/users/${userId}/userData/profile`);
+      isFetchingUserData.current = true;
+      console.log("Firebase Auth Ready. Syncing user with backend. User ID:", userId);
+      try {
+        const userSyncResponse = await apiClient.post('/users/sync', { userId });
+        console.log("User synced with backend:", userSyncResponse.data);
 
-        // Listen for real-time updates to user data
-        const unsubscribe = onSnapshot(userDocRef, (docSnap) => {
-            if (docSnap.exists()) {
-                const data = docSnap.data();
-                setUserCV(data.cv || '');
-                setSavedJobIds((data.savedJobs || []).map(job => job.job_id)); // Map to IDs for quick check
-                setSavedJobsFull(data.savedJobs || []); // Store full objects
-                setAiRecommendations(data.aiRecommendations || []);
-                setSkillGaps(data.skillGaps || []);
-                console.log("Fetched user data from Firestore.");
-            } else {
-                // Initialize user profile if it doesn't exist
-                setDoc(userDocRef, { cv: '', savedJobs: [], aiRecommendations: [], skillGaps: [] }, { merge: true })
-                    .then(() => console.log("User profile initialized in Firestore"))
-                    .catch(error => console.error("Error initializing user profile in Firestore:", error));
-            }
-            // Only show initial sync notification if not already shown
-            if (!initialSyncNotified.current) {
-                showMessageBox("User session synced with backend.", "success");
-                initialSyncNotified.current = true;
-            }
-        }, (error) => {
-            console.error("Error listening to user data from Firestore:", error);
-            showMessageBox("Failed to load user data from database. Please check your connection.", "error");
-            initialSyncNotified.current = false; // Reset if sync fails
-        });
+        if (!initialSyncNotified.current) {
+          showMessageBox("User session synced with backend.", "success");
+          initialSyncNotified.current = true;
+        }
 
-        return () => unsubscribe(); // Cleanup listener
-    } catch (err) {
-      console.error("Error during initial user data fetch setup:", err);
-      showMessageBox("Failed to setup user data fetch. Please try again later.", "error");
-      initialSyncNotified.current = false;
-    } finally {
-      isFetchingUserData.current = false;
-    }
-  }, [isAuthReady, userId, db, showMessageBox, appId]); // Added db as dependency
+        // Fetch saved jobs
+        const savedJobsResponse = await apiClient.get(`/users/${userId}/saved-jobs`);
+        setSavedJobIds(savedJobsResponse.data.map(job => job.job_id)); // Store only IDs
+        setSavedJobsFull(savedJobsResponse.data); // Store full objects for dashboard
+        console.log("Fetched saved jobs for user:", savedJobsResponse.data.length);
+
+        // Fetch user CV
+        const userCVResponse = await apiClient.get(`/users/${userId}/cv`);
+        setUserCV(userCVResponse.data.cvContent || '');
+        console.log("Fetched user CV:", userCVResponse.data.cvContent ? "exists" : "none");
+
+      } catch (err) {
+        console.error("Error syncing user or fetching user data with backend:", err);
+        showMessageBox("Failed to sync user session or load user data with backend.", "error");
+        initialSyncNotified.current = false;
+      } finally {
+        isFetchingUserData.current = false;
+      }
+    };
+
+    syncUserAndFetchUserData();
+  }, [isAuthReady, userId, showMessageBox]);
 
   return (
     <div className="min-h-screen bg-gray-100 font-sans antialiased">
@@ -321,8 +304,8 @@ function App() {
                 onUnsaveJob={handleSaveToggle}
                 aiRecommendations={aiRecommendations}
                 skillGaps={skillGaps}
-                onGenerateAI={handleGenerateAI}
-                isGeneratingAI={isGeneratingAI}
+                onGenerateAI={handleGenerateAI} // Pass the AI generation handler
+                isGeneratingAI={isGeneratingAI} // Pass the AI loading state
               />
             }
           />

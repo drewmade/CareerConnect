@@ -12,15 +12,15 @@ export const FirebaseProvider = ({ children }) => {
     const [userId, setUserId] = useState(null);
     const [isAuthReady, setIsAuthReady] = useState(false);
 
-    // Function to show a simple message box (can be replaced by a global one if available)
+    // A simple local message box for FirebaseContext internal errors/logs
     const showLocalMessageBox = (msg, type = 'success') => {
         console.log(`[FirebaseContext Message] ${type.toUpperCase()}: ${msg}`);
-        // In a real app, you'd dispatch this to a global message state
-        // For now, it's just a console log
+        // In a real app, you might want to integrate this with the global MessageBox in App.js
     };
 
     useEffect(() => {
         try {
+            // Firebase configuration from environment variables
             const firebaseConfig = {
                 apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
                 authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
@@ -31,19 +31,21 @@ export const FirebaseProvider = ({ children }) => {
                 measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID // Optional
             };
 
-            if (!firebaseConfig.projectId) {
-                console.error("Firebase Initialization Error: projectId not provided in environment variables.");
+            // Validate essential config
+            if (!firebaseConfig.projectId || !firebaseConfig.apiKey) {
+                console.error("Firebase Initialization Error: Missing projectId or apiKey in environment variables.");
                 showLocalMessageBox("Firebase setup incomplete. Contact support.", "error");
-                setIsAuthReady(true);
+                setIsAuthReady(true); // Mark auth ready to prevent infinite loading, but with error
                 return;
             }
 
             let initializedApp;
-            if (!getApps().length) {
+            // Check if a Firebase app with the default name already exists
+            if (!getApps().length) { // Only initialize if no apps are already initialized
                 initializedApp = initializeApp(firebaseConfig);
             } else {
-                initializedApp = getApp();
-                console.warn("Firebase app already initialized in FirebaseContext. Using existing app.");
+                initializedApp = getApp(); // Get the already initialized app
+                console.warn("Firebase app already initialized. Using existing app instance.");
             }
 
             const firestoreDb = getFirestore(initializedApp);
@@ -53,28 +55,29 @@ export const FirebaseProvider = ({ children }) => {
             setDb(firestoreDb);
             setAuth(firebaseAuth);
 
+            // Listen for auth state changes
             const unsubscribe = onAuthStateChanged(firebaseAuth, async (user) => {
                 if (user) {
                     setUserId(user.uid);
                 } else {
                     try {
-                        // Attempt anonymous sign-in for Render deployment
+                        // Attempt anonymous sign-in for Render deployment (no __initial_auth_token)
                         await signInAnonymously(firebaseAuth);
                     } catch (error) {
                         console.error("Firebase anonymous authentication failed:", error);
                         showLocalMessageBox("Anonymous login failed. Some features may not work.", "error");
                     }
                 }
-                setIsAuthReady(true);
+                setIsAuthReady(true); // Auth state is ready after initial check/sign-in
             });
 
-            return () => unsubscribe();
+            return () => unsubscribe(); // Clean up the listener on component unmount
         } catch (error) {
             console.error("Failed to initialize Firebase in FirebaseContext catch block:", error);
             showLocalMessageBox("Failed to initialize Firebase. Check console for details.", "error");
-            setIsAuthReady(true);
+            setIsAuthReady(true); // Ensure authReady is set even on error
         }
-    }, []);
+    }, []); // Empty dependency array ensures this runs only once
 
     return (
         <FirebaseContext.Provider value={{ app, db, auth, userId, isAuthReady }}>

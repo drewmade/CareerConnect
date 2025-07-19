@@ -1,57 +1,22 @@
 import React, { useState, useEffect } from 'react';
-import { useFirebase } from '../contexts/FireBaseContext';
+import { useFirebase } from '../contexts/FirebaseContext';
 import apiClient from '../api/apiClient'; // Import apiClient
 import { Upload, Lightbulb, XCircle } from 'lucide-react'; // Added Upload, Lightbulb, XCircle icons
 
 const UserDashboardPage = ({ showMessageBox, savedJobs, onSelectJob, onUnsaveJob, userCV, onSaveCV, aiRecommendations, skillGaps, onGenerateAI, isGeneratingAI }) => {
   const { userId, isAuthReady } = useFirebase();
-  // userCV is now a prop, so we don't need local state for it here:
-  // const [userCV, setUserCV] = useState('');
   const [cvInput, setCvInput] = useState(''); // State for the textarea input
   const [showCVEditor, setShowCVEditor] = useState(false);
-  // AI related states are now props:
-  // const [aiRecommendations, setAiRecommendations] = useState([]);
-  // const [skillGaps, setSkillGaps] = useState([]);
-  // const [isGeneratingAI, setIsGeneratingAI] = useState(false);
 
   // Initialize cvInput with the prop userCV when it changes
   useEffect(() => {
     setCvInput(userCV);
   }, [userCV]);
 
-  // Fetch user CV when userId is available (this logic is now handled in App.js)
-  // useEffect(() => {
-  //   const fetchUserCV = async () => {
-  //     if (isAuthReady && userId) {
-  //       try {
-  //         const response = await apiClient.get(`/users/${userId}/cv`);
-  //         setUserCV(response.data.cvContent || '');
-  //         setCvInput(response.data.cvContent || ''); // Initialize input with fetched CV
-  //         showMessageBox("User CV loaded.", "success");
-  //       } catch (err) {
-  //         if (err.response && err.response.status === 404) {
-  //           console.log("No CV found for this user.");
-  //           setUserCV('');
-  //           setCvInput('');
-  //         } else {
-  //           console.error("Error fetching user CV:", err);
-  //           showMessageBox("Failed to load user CV.", "error");
-  //         }
-  //       }
-  //     }
-  //   };
-  //   fetchUserCV();
-  // }, [isAuthReady, userId, showMessageBox]);
-
   const handleSaveClick = () => {
     onSaveCV(cvInput); // Call the prop function to save CV
     setShowCVEditor(false); // Hide editor after saving
   };
-
-  // handleGenerateAI is now a prop
-  // const handleGenerateAI = async () => {
-  //   showMessageBox("AI recommendation generation coming soon!", "info");
-  // };
 
   if (!isAuthReady) {
     return (
