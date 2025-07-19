@@ -1,5 +1,5 @@
-import React, { useState, useEffect, createContext, useContext } from 'react';
-import { initializeApp } from 'firebase/app';
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
@@ -7,29 +7,45 @@ const FirebaseContext = createContext(null);
 
 export const FirebaseProvider = ({ children }) => {
     const [app, setApp] = useState(null);
-    const [db, setDb] = useState(null); // Firestore instance
-    const [auth, setAuth] = useState(null); // Firebase Auth instance
+    const [db, setDb] = useState(null);
+    const [auth, setAuth] = useState(null);
     const [userId, setUserId] = useState(null);
     const [isAuthReady, setIsAuthReady] = useState(false);
 
+    // Function to show a simple message box (can be replaced by a global one if available)
+    const showLocalMessageBox = (msg, type = 'success') => {
+        console.log(`[FirebaseContext Message] ${type.toUpperCase()}: ${msg}`);
+        // In a real app, you'd dispatch this to a global message state
+        // For now, it's just a console log
+    };
+
     useEffect(() => {
-        console.log("[FirebaseContext] Initializing Firebase...");
         try {
-            // --- REPLACE THIS LINE WITH YOUR ACTUAL FIREBASE CONFIG ---
             const firebaseConfig = {
-                apiKey: "AIzaSyBEZ6OUUCN6ysNsoKrqUt6oKHwUbd3REN0",
-                authDomain: "careerconnect-be1c2.firebaseapp.com",
-                projectId: "careerconnect-be1c2",
-                storageBucket: "careerconnect-be1c2.firebasestorage.app",
-                messagingSenderId: "438458324180",
-                appId: "1:438458324180:web:0790e13a0aad611888d741"
-              // measurementId: "YOUR_MEASUREMENT_ID" // Optional
+                apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
+                authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
+                projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
+                storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
+                messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
+                appId: process.env.REACT_APP_FIREBASE_APP_ID,
+                measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID // Optional
             };
-            // --- END OF REPLACEMENT ---
 
-            console.log("[FirebaseContext] Firebase Config:", firebaseConfig);
+            if (!firebaseConfig.projectId) {
+                console.error("Firebase Initialization Error: projectId not provided in environment variables.");
+                showLocalMessageBox("Firebase setup incomplete. Contact support.", "error");
+                setIsAuthReady(true);
+                return;
+            }
 
-            const initializedApp = initializeApp(firebaseConfig);
+            let initializedApp;
+            if (!getApps().length) {
+                initializedApp = initializeApp(firebaseConfig);
+            } else {
+                initializedApp = getApp();
+                console.warn("Firebase app already initialized in FirebaseContext. Using existing app.");
+            }
+
             const firestoreDb = getFirestore(initializedApp);
             const firebaseAuth = getAuth(initializedApp);
 
@@ -38,36 +54,24 @@ export const FirebaseProvider = ({ children }) => {
             setAuth(firebaseAuth);
 
             const unsubscribe = onAuthStateChanged(firebaseAuth, async (user) => {
-                console.log("[FirebaseContext] onAuthStateChanged triggered. User:", user);
                 if (user) {
                     setUserId(user.uid);
-                    console.log("[FirebaseContext] User authenticated, UID:", user.uid);
                 } else {
-                    console.log("[FirebaseContext] No user found, attempting anonymous sign-in...");
                     try {
-                        // __initial_auth_token is for Canvas environment, not local.
-                        // We'll proceed with anonymous sign-in directly for local dev.
-                        console.log("[FirebaseContext] Signing in anonymously...");
+                        // Attempt anonymous sign-in for Render deployment
                         await signInAnonymously(firebaseAuth);
-                        // After successful sign-in (anonymous), onAuthStateChanged will trigger again
-                        // with the user object, so userId will be set then.
                     } catch (error) {
-                        console.error("[FirebaseContext] Firebase authentication failed during sign-in attempt:", error);
-                        setIsAuthReady(true);
+                        console.error("Firebase anonymous authentication failed:", error);
+                        showLocalMessageBox("Anonymous login failed. Some features may not work.", "error");
                     }
                 }
-                if (!isAuthReady) {
-                    setIsAuthReady(true);
-                    console.log("[FirebaseContext] isAuthReady set to TRUE.");
-                }
+                setIsAuthReady(true);
             });
 
-            return () => {
-                console.log("[FirebaseContext] Cleaning up auth state listener.");
-                unsubscribe();
-            };
+            return () => unsubscribe();
         } catch (error) {
-            console.error("[FirebaseContext] Failed to initialize Firebase (catch block):", error);
+            console.error("Failed to initialize Firebase in FirebaseContext catch block:", error);
+            showLocalMessageBox("Failed to initialize Firebase. Check console for details.", "error");
             setIsAuthReady(true);
         }
     }, []);

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'; // Added useCallback
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import apiClient from '../api/apiClient';
 import { Building2, MapPin, Briefcase, BellRing, ChevronLeft, Heart } from 'lucide-react';
@@ -10,7 +10,6 @@ const JobDetailPage = ({ showMessageBox, onSaveToggle, isSaved }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Memoize fetchJobDetails to make it stable across renders
   const fetchJobDetails = useCallback(async () => {
     try {
       setLoading(true);
@@ -25,24 +24,23 @@ const JobDetailPage = ({ showMessageBox, onSaveToggle, isSaved }) => {
     } finally {
       setLoading(false);
     }
-  }, [id, showMessageBox]); // Dependencies: id (from URL) and showMessageBox (memoized)
+  }, [id, showMessageBox]);
 
   useEffect(() => {
-    if (id) { // Only fetch if ID exists
+    if (id) {
       fetchJobDetails();
     }
-  }, [id, fetchJobDetails]); // Dependencies: id and the memoized fetchJobDetails function
+  }, [id, fetchJobDetails]);
 
-  const handleBack = useCallback(() => { // Memoize handleBack
+  const handleBack = useCallback(() => {
     navigate('/jobs');
   }, [navigate]);
 
-  const handleSaveToggleClick = useCallback(() => { // Memoize handleSaveToggleClick
-    if (onSaveToggle && job) { // Ensure job data is available before toggling save
+  const handleSaveToggleClick = useCallback(() => {
+    if (onSaveToggle && job) {
         onSaveToggle(job.job_id);
     }
-  }, [onSaveToggle, job]); // Dependencies: onSaveToggle (memoized) and job (for job.job_id)
-
+  }, [onSaveToggle, job]);
 
   if (loading) {
     return (
