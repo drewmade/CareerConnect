@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom';
 import apiClient from './api/apiClient';
-import { useFirebase } from './contexts/FireBaseContext'; // Corrected casing: FirebaseContext
+import { useFirebase } from './contexts/FireBaseContext'; // Corrected casing: FireBaseContext
 import { XCircle, User as UserIcon } from 'lucide-react';
 
 // Import our page components (these MUST exist as separate files in frontend/src/pages/)
