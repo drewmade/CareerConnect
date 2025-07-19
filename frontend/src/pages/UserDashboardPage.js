@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useFirebase } from '../contexts/FirebaseContext';
+import { useFirebase } from '../contexts/FireBaseContext';
 import apiClient from '../api/apiClient'; // Import apiClient
 import { Upload, Lightbulb, XCircle } from 'lucide-react'; // Added Upload, Lightbulb, XCircle icons
 

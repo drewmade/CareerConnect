@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'; // Added useCallback
 import { BrowserRouter as Router, Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom';
 import apiClient from './api/apiClient';
-import { useFirebase } from './contexts/FirebaseContext';
+import { useFirebase } from './contexts/FireBaseContext';
 import { XCircle, User as UserIcon } from 'lucide-react';
 
 // Import our page components
