@@ -1,8 +1,13 @@
 import axios from 'axios';
 
-// Create an Axios instance with a base URL for your backend API
+// IMPORTANT: For production deployment on Render, this URL MUST point to your live backend service.
+// You can also use an environment variable (e.g., process.env.REACT_APP_BACKEND_URL)
+// if your hosting platform supports injecting it during the frontend build.
+// For Render, you'll set an environment variable when creating the static site.
+const API_BASE_URL = 'https://careerconnect-backend-pa5m.onrender.com/api'; // <--- Update this line with your LIVE Render Backend URL + /api
+
 const apiClient = axios.create({
-  baseURL: 'http://localhost:5000/api', // Your backend API base URL
+  baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
