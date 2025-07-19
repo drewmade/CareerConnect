@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react'; // Added useCallback
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom';
 import apiClient from './api/apiClient';
-import { useFirebase } from './contexts/FireBaseContext';
+import { useFirebase } from './contexts/FireBaseContext'; // Corrected casing: FirebaseContext
 import { XCircle, User as UserIcon } from 'lucide-react';
 
 // Import our page components (these MUST exist as separate files in frontend/src/pages/)
@@ -27,7 +27,7 @@ const MessageBox = ({ message, type, onClose }) => {
 
 // --- Main App Component ---
 function App() {
-  const { userId, isAuthReady } = useFirebase();
+  const { userId, isAuthReady, db } = useFirebase(); // Added db from useFirebase
   const [message, setMessage] = useState(null);
   const [messageType, setMessageType] = useState('success');
   const [savedJobIds, setSavedJobIds] = useState([]); // Stores only IDs for quick lookup
@@ -41,6 +41,12 @@ function App() {
 
   const initialSyncNotified = useRef(false);
   const isFetchingUserData = useRef(false); // New ref to prevent multiple fetches
+
+  // Firestore app ID for user data
+  // This is a Canvas-specific variable. For Render, it will default to 'default-app-id'.
+  // We'll rely on Firebase security rules to manage user data.
+  const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
 
   const showMessageBox = useCallback((msg, type = 'success') => { // Memoize showMessageBox
     setMessage(msg);
@@ -146,7 +152,7 @@ function App() {
       };
 
       // Use environment variable for API key in production builds
-      const apiKey = process.env.REACT_APP_GEMINI_API_KEY; // <--- This will now correctly read from Render ENV
+      const apiKey = process.env.REACT_APP_GEMINI_API_KEY;
 
       const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
 
@@ -166,7 +172,19 @@ function App() {
 
           setAiRecommendations(parsedJson.recommendations || []);
           setSkillGaps(parsedJson.skillGaps || []);
-          showMessageBox("AI recommendations generated!", "success");
+
+          // Save AI recommendations to Firestore
+          if (db && userId) {
+            // Note: This path is for Firestore, which is separate from the PostgreSQL backend.
+            // If you intend to store AI recommendations in PostgreSQL, you'd need a backend API route for it.
+            // For now, it's set up for Firestore as per previous iterations.
+            const userDocRef = doc(db, `artifacts/${appId}/users/${userId}/userData/profile`);
+            await updateDoc(userDocRef, {
+                aiRecommendations: parsedJson.recommendations || [],
+                skillGaps: parsedJson.skillGaps || []
+            });
+          }
+          showMessageBox("AI recommendations generated and saved!", "success");
       } else {
           console.error("Unexpected API response structure:", result);
           showMessageBox("Failed to generate AI recommendations. Unexpected response.", "error");
@@ -177,49 +195,57 @@ function App() {
     } finally {
       setIsGeneratingAI(false);
     }
-  }, [userId, userCV, showMessageBox]);
+  }, [userId, userCV, showMessageBox, db, appId]);
 
-
-  // Effect to sync user with backend (PostgreSQL) and fetch user-specific data
+  // Effect to sync user with backend (PostgreSQL) and fetch user-specific data from Firestore
   useEffect(() => {
-    const syncUserAndFetchUserData = async () => {
-      if (!isAuthReady || !userId || isFetchingUserData.current) {
-        return;
-      }
+    if (!isAuthReady || !userId || !db || isFetchingUserData.current) {
+      return;
+    }
 
-      isFetchingUserData.current = true;
-      console.log("Firebase Auth Ready. Syncing user with backend. User ID:", userId);
-      try {
-        const userSyncResponse = await apiClient.post('/users/sync', { userId });
-        console.log("User synced with backend:", userSyncResponse.data);
+    isFetchingUserData.current = true;
+    console.log("Firebase Auth Ready. Syncing user data. User ID:", userId);
+    try {
+        // Firestore user data path
+        const userDocRef = doc(db, `artifacts/${appId}/users/${userId}/userData/profile`);
 
-        if (!initialSyncNotified.current) {
-          showMessageBox("User session synced with backend.", "success");
-          initialSyncNotified.current = true;
-        }
+        // Listen for real-time updates to user data
+        const unsubscribe = onSnapshot(userDocRef, (docSnap) => {
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                setUserCV(data.cv || '');
+                // Ensure savedJobs are mapped correctly if coming from Firestore
+                setSavedJobIds((data.savedJobs || []).map(job => job.job_id));
+                setSavedJobsFull(data.savedJobs || []);
+                setAiRecommendations(data.aiRecommendations || []);
+                setSkillGaps(data.skillGaps || []);
+                console.log("Fetched user data from Firestore.");
+            } else {
+                // Initialize user profile if it doesn't exist
+                setDoc(userDocRef, { cv: '', savedJobs: [], aiRecommendations: [], skillGaps: [] }, { merge: true })
+                    .then(() => console.log("User profile initialized in Firestore"))
+                    .catch(error => console.error("Error initializing user profile in Firestore:", error));
+            }
+            // Only show initial sync notification if not already shown
+            if (!initialSyncNotified.current) {
+                showMessageBox("User session synced with backend.", "success");
+                initialSyncNotified.current = true;
+            }
+        }, (error) => {
+            console.error("Error listening to user data from Firestore:", error);
+            showMessageBox("Failed to load user data from database. Please check your connection.", "error");
+            initialSyncNotified.current = false; // Reset if sync fails
+        });
 
-        // Fetch saved jobs
-        const savedJobsResponse = await apiClient.get(`/users/${userId}/saved-jobs`);
-        setSavedJobIds(savedJobsResponse.data.map(job => job.job_id)); // Store only IDs
-        setSavedJobsFull(savedJobsResponse.data); // Store full objects for dashboard
-        console.log("Fetched saved jobs for user:", savedJobsResponse.data.length);
-
-        // Fetch user CV
-        const userCVResponse = await apiClient.get(`/users/${userId}/cv`);
-        setUserCV(userCVResponse.data.cvContent || '');
-        console.log("Fetched user CV:", userCVResponse.data.cvContent ? "exists" : "none");
-
-      } catch (err) {
-        console.error("Error syncing user or fetching user data with backend:", err);
-        showMessageBox("Failed to sync user session or load user data with backend.", "error");
-        initialSyncNotified.current = false;
-      } finally {
-        isFetchingUserData.current = false;
-      }
-    };
-
-    syncUserAndFetchUserData();
-  }, [isAuthReady, userId, showMessageBox]);
+        return () => unsubscribe(); // Cleanup listener
+    } catch (err) {
+      console.error("Error during initial user data fetch setup:", err);
+      showMessageBox("Failed to setup user data fetch. Please try again later.", "error");
+      initialSyncNotified.current = false;
+    } finally {
+      isFetchingUserData.current = false;
+    }
+  }, [isAuthReady, userId, db, showMessageBox, appId]); // Added db as dependency
 
   return (
     <div className="min-h-screen bg-gray-100 font-sans antialiased">

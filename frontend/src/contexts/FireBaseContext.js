@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
+import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
 const FirebaseContext = createContext(null);
@@ -13,14 +13,15 @@ export const FirebaseProvider = ({ children }) => {
     const [isAuthReady, setIsAuthReady] = useState(false);
 
     // A simple local message box for FirebaseContext internal errors/logs
+    // This is just for console logging within the context itself.
     const showLocalMessageBox = (msg, type = 'success') => {
         console.log(`[FirebaseContext Message] ${type.toUpperCase()}: ${msg}`);
-        // In a real app, you might want to integrate this with the global MessageBox in App.js
     };
 
     useEffect(() => {
         try {
             // Firebase configuration from environment variables
+            // Using the exact config you provided, but accessed via process.env
             const firebaseConfig = {
                 apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
                 authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
@@ -28,21 +29,23 @@ export const FirebaseProvider = ({ children }) => {
                 storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
                 messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
                 appId: process.env.REACT_APP_FIREBASE_APP_ID,
-                measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID // Optional
+                // measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID // Optional, if you have it
             };
 
             // Validate essential config
             if (!firebaseConfig.projectId || !firebaseConfig.apiKey) {
                 console.error("Firebase Initialization Error: Missing projectId or apiKey in environment variables.");
-                showLocalMessageBox("Firebase setup incomplete. Contact support.", "error");
-                setIsAuthReady(true); // Mark auth ready to prevent infinite loading, but with error
+                showLocalMessageBox("Firebase setup incomplete. Please ensure all REACT_APP_FIREBASE_... environment variables are set.", "error");
+                setIsAuthReady(true); // Mark auth ready to prevent infinite loading
                 return;
             }
 
             let initializedApp;
             // Check if a Firebase app with the default name already exists
-            if (!getApps().length) { // Only initialize if no apps are already initialized
+            // This prevents the "app/duplicate-app" error
+            if (!getApps().length) {
                 initializedApp = initializeApp(firebaseConfig);
+                console.log("Firebase app initialized successfully.");
             } else {
                 initializedApp = getApp(); // Get the already initialized app
                 console.warn("Firebase app already initialized. Using existing app instance.");
@@ -59,10 +62,13 @@ export const FirebaseProvider = ({ children }) => {
             const unsubscribe = onAuthStateChanged(firebaseAuth, async (user) => {
                 if (user) {
                     setUserId(user.uid);
+                    console.log("Firebase user authenticated:", user.uid);
                 } else {
                     try {
-                        // Attempt anonymous sign-in for Render deployment (no __initial_auth_token)
-                        await signInAnonymously(firebaseAuth);
+                        // Attempt anonymous sign-in for Render deployment
+                        const anonymousUser = await signInAnonymously(firebaseAuth);
+                        setUserId(anonymousUser.user.uid);
+                        console.log("Firebase signed in anonymously:", anonymousUser.user.uid);
                     } catch (error) {
                         console.error("Firebase anonymous authentication failed:", error);
                         showLocalMessageBox("Anonymous login failed. Some features may not work.", "error");
@@ -77,7 +83,7 @@ export const FirebaseProvider = ({ children }) => {
             showLocalMessageBox("Failed to initialize Firebase. Check console for details.", "error");
             setIsAuthReady(true); // Ensure authReady is set even on error
         }
-    }, []); // Empty dependency array ensures this runs only once
+    }, []); // Empty dependency array ensures this runs only once on mount
 
     return (
         <FirebaseContext.Provider value={{ app, db, auth, userId, isAuthReady }}>
