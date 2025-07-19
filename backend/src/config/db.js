@@ -1,19 +1,25 @@
 const { Pool } = require('pg');
+require('dotenv').config(); // Load environment variables from .env file
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
+  // --- IMPORTANT: Add SSL configuration for Render PostgreSQL ---
+  ssl: {
+    rejectUnauthorized: false // Required for Render's default SSL setup
+  }
+  // --- END SSL CONFIG ---
 });
 
 pool.on('connect', () => {
-  console.log('Connected to the PostgreSQL database!');
+  console.log('[DB] Connected to PostgreSQL database!');
 });
 
 pool.on('error', (err) => {
-  console.error('Error connecting to PostgreSQL:', err.message, err.stack);
-  process.exit(1); // Exit process if database connection fails
+  console.error('[DB] Unexpected error on idle client', err);
+  process.exit(-1); // Exit process if there's a critical database error
 });
 
 module.exports = {
   query: (text, params) => pool.query(text, params),
-  pool, // Export pool for direct access if needed
+  pool, // Export the pool directly if needed for more advanced operations
 };
